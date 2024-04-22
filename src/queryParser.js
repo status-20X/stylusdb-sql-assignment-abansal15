@@ -1,16 +1,30 @@
 // src/queryParser.js
 
-function parseQuery(query) {
+function parseQuery5(query) {
     const selectRegex = /SELECT (.+?) FROM (.+?)(?: WHERE (.*))?$/i;
     const match = query.match(selectRegex);
 
     if (match) {
-        const [, fields, table, whereString] = match;
-        const whereClauses = whereString ? parseWhereClause(whereString) : [];
+        const [, fields, table, whereClause] = match;
         return {
             fields: fields.split(',').map(field => field.trim()),
             table: table.trim(),
-            whereClauses
+            whereClause: whereClause ? whereClause.trim() : null
+        };
+    } else {
+        throw new Error('Invalid query format');
+    }
+}
+
+function parseQuery4(query) {
+    const selectRegex = /SELECT (.+) FROM (.+)/i;
+    const match = query.match(selectRegex);
+
+    if (match) {
+        const [, fields, table] = match;
+        return {
+            fields: fields.split(',').map(field => field.trim()),
+            table: table.trim()
         };
     } else {
         throw new Error('Invalid query format');
@@ -25,4 +39,4 @@ function parseWhereClause(whereString) {
     });
 }
 
-module.exports = parseQuery;
+module.exports = { parseQuery5, parseQuery4, parseWhereClause };
