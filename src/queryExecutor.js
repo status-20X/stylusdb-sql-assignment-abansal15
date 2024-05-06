@@ -7,7 +7,7 @@ function performInnerJoin(data, joinData, joinCondition, fields, table) {
 			.filter(joinRow => {
 				const mainValue = mainRow[joinCondition.left.split('.')[1]];
 				const joinValue = joinRow[joinCondition.right.split('.')[1]];
-				return (mainValue === joinValue);
+				return mainValue === joinValue;
 			})
 			.map(joinRow => {
 				return fields.reduce((acc, field) => {
@@ -91,24 +91,23 @@ function evaluateCondition(row, clause) {
 	}
 
 	// Parse row value and condition value based on their actual types
-	let conditionValue = parseValue(value);
 	const rowValue = parseValue(row[field]);
-
+	let conditionValue = parseValue(value);
 
 	if (operator === 'LIKE') {
 		// Transform SQL LIKE pattern to JavaScript RegExp pattern
 		const regexPattern = '^' + value.replace(/%/g, '.*').replace(/_/g, '.') + '$';
 		const regex = new RegExp(regexPattern, 'i'); // 'i' for case-insensitive matching
-		return regex.test(row[field]);
+		return (regex.test(row[field]));
 	}
 
 	switch (operator) {
 		case '=': return rowValue === conditionValue;
-		case '>': return rowValue > conditionValue;
 		case '<': return rowValue < conditionValue;
 		case '>=': return rowValue >= conditionValue;
 		case '<=': return rowValue <= conditionValue;
 		case '!=': return rowValue !== conditionValue;
+		case '>': return rowValue > conditionValue;
 
 		default: throw new Error(`Unsupported operator: ${operator}`);
 	}
@@ -118,8 +117,8 @@ function evaluateCondition(row, clause) {
 function parseValue(value) {
 
 	// Return null or undefined as is
-	if ((value === undefined) || (value === null)) {
-		return (value);
+	if (value === null || value === undefined) {
+		return value;
 	}
 
 	// If the value is a string enclosed in single or double quotes, remove them
@@ -157,15 +156,14 @@ function applyGroupBy(data, groupByFields, aggregateFunctions) {
 				const value = parseFloat(row[aggField]);
 
 				switch (aggFunc.toUpperCase()) {
-
-					case 'MAX':
-						groupResults[groupKey].maxes[aggField] = Math.max(groupResults[groupKey].maxes[aggField] || value, value);
-						break;
 					case 'SUM':
 						groupResults[groupKey].sums[aggField] = (groupResults[groupKey].sums[aggField] || 0) + value;
 						break;
 					case 'MIN':
 						groupResults[groupKey].mins[aggField] = Math.min(groupResults[groupKey].mins[aggField] || value, value);
+						break;
+					case 'MAX':
+						groupResults[groupKey].maxes[aggField] = Math.max(groupResults[groupKey].maxes[aggField] || value, value);
 						break;
 					// Additional aggregate functions can be added here
 				}
@@ -215,15 +213,16 @@ async function executeSELECTQuery(query) {
 		if (joinTable && joinCondition) {
 			const joinData = await readCSV(`${joinTable}.csv`);
 			switch (joinType.toUpperCase()) {
-				case 'INNER':
-					data = performInnerJoin(data, joinData, joinCondition, fields, table);
-					break;
 				case 'LEFT':
 					data = performLeftJoin(data, joinData, joinCondition, fields, table);
 					break;
 				case 'RIGHT':
 					data = performRightJoin(data, joinData, joinCondition, fields, table);
 					break;
+				case 'INNER':
+					data = performInnerJoin(data, joinData, joinCondition, fields, table);
+					break;
+
 				default:
 					throw new Error(`Unsupported JOIN type: ${joinType}`);
 			}
@@ -246,6 +245,9 @@ async function executeSELECTQuery(query) {
 						case 'COUNT':
 							result[field] = filteredData.length;
 							break;
+						case 'SUM':
+							result[field] = filteredData.reduce((acc, row) => acc + parseFloat(row[aggField]), 0);
+							break;
 						case 'AVG':
 							result[field] = filteredData.reduce((acc, row) => acc + parseFloat(row[aggField]), 0) / filteredData.length;
 							break;
@@ -255,10 +257,6 @@ async function executeSELECTQuery(query) {
 						case 'MAX':
 							result[field] = Math.max(...filteredData.map(row => parseFloat(row[aggField])));
 							break;
-						case 'SUM':
-							result[field] = filteredData.reduce((acc, row) => acc + parseFloat(row[aggField]), 0);
-							break;
-
 						// Additional aggregate functions can be handled here
 					}
 				}
@@ -291,9 +289,8 @@ async function executeSELECTQuery(query) {
 			if (orderByFields) {
 				orderedResults = groupResults.sort((a, b) => {
 					for (let { fieldName, order } of orderByFields) {
-						if (a[fieldName] > b[fieldName]) return order === 'ASC' ? 1 : -1;
-
 						if (a[fieldName] < b[fieldName]) return order === 'ASC' ? -1 : 1;
+						if (a[fieldName] > b[fieldName]) return order === 'ASC' ? 1 : -1;
 					}
 					return 0;
 				});
@@ -306,7 +303,7 @@ async function executeSELECTQuery(query) {
 					// Assuming 'field' is just the column name without table prefix
 					selectedRow[field] = row[field];
 				});
-				return (selectedRow);
+				return selectedRow;
 			});
 
 			// Remove duplicates if specified
@@ -319,7 +316,9 @@ async function executeSELECTQuery(query) {
 			if (limit !== null) {
 				limitResults = distinctResults.slice(0, limit);
 			}
-			return (limitResults);
+
+			return limitResults;
+
 
 		}
 	} catch (error) {
@@ -372,44 +371,3 @@ async function executeDELETEQuery(query) {
 
 
 module.exports = { executeSELECTQuery, executeINSERTQuery, executeDELETEQuery };
-
-// const { parseQuery4, parseQuery5 } = require('./queryParser');
-// const readCSV = require('./csvReader');
-
-// async function executeSELECTQuery4(query) {
-//     const { fields, table } = parseQuery4(query);
-//     const data = await readCSV(`${table}.csv`);
-
-//     // Filter the fields based on the query
-//     return data.map(row => {
-//         const filteredRow = {};
-//         fields.forEach(field => {
-//             filteredRow[field] = row[field];
-//         });
-//         return filteredRow;
-//     });
-// }
-
-// async function executeSELECTQuery5(query) {
-//     const { fields, table, whereClause } = parseQuery5(query);
-//     const data = await readCSV(`${table}.csv`);
-    
-//     // Filtering based on WHERE clause
-//     const filteredData = whereClause
-//         ? data.filter(row => {
-//             const [field, value] = whereClause.split('=').map(s => s.trim());
-//             return row[field] === value;
-//         })
-//         : data;
-
-//     // Selecting the specified fields
-//     return filteredData.map(row => {
-//         const selectedRow = {};
-//         fields.forEach(field => {
-//             selectedRow[field] = row[field];
-//         });
-//         return selectedRow;
-//     });
-// }
-
-// module.exports = { executeSELECTQuery4, executeSELECTQuery5 };
